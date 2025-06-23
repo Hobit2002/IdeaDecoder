@@ -22,7 +22,7 @@ The prototype was developed for a young Czech-speaking girl with a permanent tra
 The use of **Idea Decoder** is designed to be as straightforward as possible. Assuming the transcribing component is already running (for technical details, see [System Architecture](#system-architecture) and [Transcribing Component](#transcribing-component)), the steps for the user or patient are as follows:
 
 1. **Open the Application**  
-   Navigate to [jasmiapp.onrender.com](https://jasmiapp.onrender.com) in a web browser. (Note that the server uses a different version of this repository, which is in active development, meaning that the web app might not strictly correspond to codes provided here)
+   Navigate to [jasmiapp.onrender.com](https://jasmiapp.onrender.com) in a web browser. (Note that the server uses a different version of this repository, which is in active development, meaning that the web app might not strictly correspond to the codes provided here)
 
 2. **Speak One Word per Turn**  
    The following screen will appear. The patient is instructed to say *at most one word* during each cycle of the green timer at the top. (For our patient, we use three seconds per word. For others, this interval should be adjusted to match their speech rate.)
@@ -149,7 +149,7 @@ python transcribing_client/test_transcription_client.py
 
 ## Server Component
 
-The application runs on a [Node.js](https://nodejs.org/en) server currently hosted on [Render](https://render.com/), accessible at [https://jasmiapp.onrender.com](https://jasmiapp.onrender.com).
+The development version of the application runs on a [Node.js](https://nodejs.org/en) server currently hosted on [Render](https://render.com/), accessible at [https://jasmiapp.onrender.com](https://jasmiapp.onrender.com).
 
 Due to hosting constraints, opening the application after a period of inactivity typically requires over 50 seconds to load. Additionally, to make the application fully operational, the following request should be made to download supplementary data that are excluded from the repository for privacy and performance reasons. These include user-specific vocabulary configurations and, optionally, synthetic conversations used for fine-tuning:
 
