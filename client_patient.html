@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Audio Share & Listen</title>
+  <style>
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      height: 100vh;
+      background: linear-gradient(135deg, #dfe9f3, #ffffff);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      padding: 20px;
+    }
+
+    .timer-circle {
+      width: 20vh;
+      height: 20vh;
+      border-radius: 50%;
+      background: conic-gradient(#4caf50 var(--progress, 0), #e0e0e0 0);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 5em;
+      font-weight: bold;
+      color: #333;
+      margin-bottom: 30px;
+      transition: background 0.1s linear;
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+    }
+
+    #transcriptions {
+      width: 80%;
+      height: 20vh;
+      max-height: 40vh;
+      overflow-y: auto;
+      background: #ffffffd9;
+      border: 1px solid #ccc;
+      border-radius: 10px;
+      padding: 15px;
+      font-size: 1.2em;
+      color: #333;
+      box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.05);
+    }
+
+    /* Individual transcription entries */
+    .transcription-entry {
+      margin: 0.5em 0;
+      opacity: 0;
+      animation: fadeIn 0.6s forwards;
+    }
+
+    /* Entry animation */
+    @keyframes fadeIn {
+      to {
+        opacity: 1;
+      }
+    }
+
+    /* Celebration animation */
+    .transcription-entry.celebrate {
+      animation: glow 1s ease-out, fadeIn 0.6s forwards;
+      color: #2e7d32;
+      background-color: yellow;
+    }
+
+    @keyframes glow {
+      0% {
+        text-shadow: 0 0 5px #8bc34a, 0 0 10px #8bc34a;
+      }
+      100% {
+        text-shadow: none;
+      }
+    }
+
+    #transcriptions { margin-top: 30px; font-size: 1.5em; color: #333; }
+
+    #qrCode { margin-top: 20px; }
+
+    .main_button{
+      display: inline-block;
+      width: 50vw;
+      height: 5vh;
+      padding: 14px 20px;
+      font-size: 2em;
+      font-weight: 600;
+      color: white;
+      border: none;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      cursor: pointer;
+      text-align: center;
+      transition: background 0.3s ease, transform 0.1s ease;
+      margin: 10px auto;
+      display: block;
+    }
+
+    #main_button:active {
+      transform: scale(0.97);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    }
+
+    #shareBtn {
+      background: linear-gradient(135deg, #4CAF50, #45A049);
+    }
+
+    #shareBtn:hover {
+      background: linear-gradient(135deg, #45A049, #3E8E41);
+    }
+    
+    #vocabBtn {
+      background: linear-gradient(135deg, #448a6f, #346351);
+    }
+
+    #vocabBtn:hover {
+      background: linear-gradient(135deg, #346351,#315547);
+    }
+
+    button { margin-right: 10px; padding: 10px 20px; font-size: 1em; }
+
+    audio { width: 30vw; height: 10vh;}
+
+    .transcription-entry button {
+      background: none;
+      border: none;
+      font-size: 1.2em;
+      cursor: pointer;
+    }
+
+    .transcription-entry button:hover {
+      transform: scale(1.1);
+    }
+
+    .celebrate {
+      animation: flash 0.3s ease-in-out 3;
+    }
+
+    @keyframes flash {
+        0%   { background-color: #dff0d8; }
+        50%  { background-color: #f0fff0; }
+        100% { background-color: transparent; }
+    }
+
+    #overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.6); /* semi-transparent backdrop */
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    }
+
+  .vocab-modal {
+    background: white;
+    padding: 24px;
+    border-radius: 12px;
+    width: 80vw;
+    height: 40vh;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+    position: relative;
+  }
+
+  .close-button {
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    font-size: 20px;
+    background: none;
+    border: none;
+    cursor: pointer;
+  }
+    </style>
+
+</head>
+<body>
+
+<div hidden>
+  <h1>Audio Share & Listen</h1>
+  <button id="listenBtn">Listen</button>
+  <input type="file" id="audio-file" accept="audio/*">
+</div>
+
+
+
+<div id="qrCode"></div>
+
+<div class="timer-circle" id="timer">3</div>
+
+<div id="transcriptions"></div>
+
+<audio id="episodePlayer" controls crossorigin="anonymous">
+  <source src="episode2.mp3" type="audio/mp3">
+</audio>
+
+<button class="main_button" id="shareBtn">Share for Listeners</button>
+
+<button class="main_button" id="vocabBtn">Manage Vocabulary</button>
+
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+<script src="encodings.json" type="application/json" id="vocabData"></script>
+
+<script>
+
+let audioCounter = 0;
+
+let workletNode;
+let socket;
+let audioContext;
+let mediaStream;
+let processor;
+let buffer = [];
+let leftover = [];
+let sampleRate = 48000; // Default, will update after getting AudioContext info
+let segmentLength = 3; // seconds
+let overlap = 0.75; // seconds
+let serverAdress = "jasmiapp.onrender.com"
+
+//const essentia = EssentiaWASM(); // load WebAssembly backend
+//ortSession = ort.InferenceSession.create("http://localhost:8000/mlp_best_fullset.onnx");
+
+window.onload = () => {
+  connectWebSocket();
+  document.getElementById('shareBtn').onclick = handleShare;
+  document.getElementById('listenBtn').onclick = startListening;
+  document.getElementById("audio-file").addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (file) startSimulatedListening(file);
+  });  
+};
+
+let vocabList = [];
+
+window.addEventListener('DOMContentLoaded', () => {
+  const raw = document.getElementById('vocabData')?.textContent;
+  if (raw) {
+    try {
+      vocabList = JSON.parse(raw);
+    } catch (e) {
+      console.error("Failed to parse encodings.json", e);
+    }
+  }
+});
+
+function connectWebSocket() {
+  console.log("Connecting to WebSocket at ",`ws://${serverAdress}`)
+  socket = new WebSocket(`wss://${serverAdress}`);
+  
+  socket.onopen = () => {
+    console.log('WebSocket connected');
+    // Register as speaker
+    socket.send(JSON.stringify({ action: "register_client", role: "speaker" }));
+    }
+  socket.onmessage = (event) => {
+    const message = JSON.parse(event.data);
+    if (message.type === 'address') {
+      showQRCode(message.address);
+    }
+    if (message.type === 'transcription') {
+      displayTranscription(message.counter,message.text);
+    }
+    if (message.type === 'vocabularies') {
+      vocabs = JSON.parse(message.vocabs);
+      vocabs.forEach(voc => {vocabList.push(voc)})
+    }
+  };
+  
+  socket.onerror = (error) => console.error('WebSocket error', error);
+  socket.onclose = () => console.log('WebSocket closed');
+}
+
+function handleShare() {
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify({ action: 'request_address' }));
+  }
+}
+
+function showQRCode(address) {
+  // Create or reuse the floating container
+  let qrOverlay = document.getElementById('qrOverlay');
+  if (!qrOverlay) {
+    qrOverlay = document.createElement('div');
+    qrOverlay.id = 'overlay';
+    document.body.appendChild(qrOverlay);
+  }
+
+  // Reset content and styling
+  qrOverlay.innerHTML = '';
+  qrOverlay.style.display = 'flex';
+
+  const canvas = document.createElement('canvas');
+  QRCode.toCanvas(canvas, address, { width: 700 }, function (error) {
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    qrOverlay.appendChild(canvas);
+
+    // Auto-hide after 10 seconds
+    setTimeout(() => {
+      qrOverlay.style.display = 'none';
+      qrOverlay.innerHTML = '';
+    }, 10000);
+  });
+}
+
+async function startListening() {
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate });
+
+    await audioContext.audioWorklet.addModule('recorderWorklet.js');
+    await audioContext.resume();
+    logToServer('Audio context resumed and worklet loaded');
+
+    const source = audioContext.createMediaStreamSource(mediaStream);
+    workletNode = new AudioWorkletNode(audioContext, 'recorder-processor');
+
+    workletNode.port.onmessage = (event) => {
+      const input = event.data;
+      buffer.push(...input);
+    };
+    startRecordingCycle();
+
+    source.connect(workletNode).connect(audioContext.destination);
+
+  } catch (err) {
+    console.error('Microphone error', err);
+    logToServer(`Microphone error: ${err.message}`);
+  }
+}
+
+function startSimulatedListening(file) {
+    const reader = new FileReader();
+  
+    reader.onload = async (event) => {
+      const arrayBuffer = event.target.result;
+  
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      sampleRate = audioContext.sampleRate;
+  
+      const decodedAudio = await audioContext.decodeAudioData(arrayBuffer);
+  
+      // We simulate streaming with chunks of data
+      const chunkSize = 4096;
+      const totalSamples = decodedAudio.length;
+      const channelData = decodedAudio.getChannelData(0);
+      let currentIndex = 0;
+  
+      function streamChunk() {
+        if (currentIndex >= totalSamples) return;
+  
+        const chunk = channelData.slice(currentIndex, currentIndex + chunkSize);
+        buffer.push(...chunk);
+        processSegments();
+  
+        currentIndex += chunkSize;
+  
+        // Simulate real-time streaming by scheduling next chunk
+        setTimeout(streamChunk, (chunkSize / sampleRate) * 1000); // in ms
+      }
+  
+      streamChunk();
+    };
+  
+    reader.readAsArrayBuffer(file);
+}
+
+function processSegments() {
+  const segmentSamples = segmentLength * sampleRate;
+  const stepSamples = (segmentLength - overlap) * sampleRate;
+
+  let combined = [...leftover, ...buffer];
+  let i = 0;
+
+  while (combined.length - i >= segmentSamples) {
+    const segment = combined.slice(i, i + segmentSamples);
+    if (speaker_detection(segment)) {
+      sendAudioSegment(segment);
+    }
+    i += stepSamples;
+  }
+
+  leftover = combined.slice(i);
+  buffer = [];
+}
+
+function sendAudioSegment(segment) {
+  if (!socket || socket.readyState !== WebSocket.OPEN) return;
+
+  const floatArray = new Float32Array(segment);
+  const buffer = new ArrayBuffer(4 + floatArray.byteLength);
+  const view = new DataView(buffer);
+  view.setUint32(0, audioCounter++, true);
+  new Float32Array(buffer, 4).set(floatArray);
+
+  socket.send(buffer);
+}
+
+function logToServer(message) {
+  console.log(message);
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify({ action: 'log', "msg": message }));
+  }
+}
+
+async function restartWorklet() {
+  if (!audioContext || !mediaStream) return;
+
+  const source = audioContext.createMediaStreamSource(mediaStream);
+  workletNode = new AudioWorkletNode(audioContext, 'recorder-processor');
+
+  workletNode.port.onmessage = (event) => {
+    buffer.push(...event.data);
+  };
+
+  source.connect(workletNode).connect(audioContext.destination);
+}
+
+document.addEventListener('visibilitychange', async () => {
+  if (!audioContext) return;
+
+  if (document.hidden) {
+    logToServer('App backgrounded, suspending audio context');
+    await audioContext.suspend();
+  } else {
+    logToServer('App foregrounded, resuming audio context');
+    await audioContext.resume();
+
+    if (audioContext.state === 'running') {
+      // Check if worklet node is still producing messages
+      let isDead = true;
+      const watchdog = new Promise(resolve => {
+        const timeout = setTimeout(() => {
+          workletNode.port.removeEventListener('message', testListener);
+          resolve(true); // No message received → assume dead
+        }, 1000);
+
+        function testListener() {
+          clearTimeout(timeout);
+          workletNode.port.removeEventListener('message', testListener);
+          resolve(false); // Received message → worklet is alive
+        }
+
+        workletNode.port.addEventListener('message', testListener);
+      });
+
+      const restartNeeded = await watchdog;
+      if (restartNeeded) {
+        logToServer('Worklet not responding, restarting node');
+        restartWorklet(); // Implement this
+      }
+    }
+  }
+});
+
+function sendAudioSegmentInt(segment) {
+  if (!socket || socket.readyState !== WebSocket.OPEN) return;
+
+  // Convert Float32 to Int16 PCM
+  const pcm = new Int16Array(segment.length);
+  for (let i = 0; i < segment.length; i++) {
+    pcm[i] = Math.max(-1, Math.min(1, segment[i])) * 0x7FFF;
+  }
+  var reconstructed = int16ToFloat32(pcm)
+  console.log(reconstructed.slice(0,50))
+  console.log(computeLoss(segment,reconstructed))
+
+  // Create a buffer with 4 bytes for the counter + PCM bytes
+  const buffer = new ArrayBuffer(4 + pcm.byteLength);
+  const view = new DataView(buffer);
+
+  // Write the counter as a 32-bit unsigned integer
+  view.setUint32(0, audioCounter++, true); // true = little endian
+
+  // Copy PCM data after the counter
+  new Int16Array(buffer, 4).set(pcm);
+
+  socket.send(buffer);
+}
+
+function int16ToFloat32(int16Array) {
+  const floatArray = new Float32Array(int16Array.length);
+  for (let i = 0; i < int16Array.length; i++) {
+    floatArray[i] = int16Array[i] / 0x7FFF;
+  }
+  return floatArray;
+}
+
+function computeLoss(original, reconstructed) {
+  let mse = 0;
+  let maxError = 0;
+  for (let i = 0; i < original.length; i++) {
+    const error = original[i] - reconstructed[i];
+    mse += error * error;
+    maxError = Math.max(maxError, Math.abs(error));
+  }
+  mse /= original.length;
+  return { mse, maxError };
+}
+
+function displayTranscription(counter, text) {
+  const transcriptionsDiv = document.getElementById('transcriptions');
+
+  // Create the main container
+  const entryDiv = document.createElement('div');
+  entryDiv.className = 'transcription-entry';
+  entryDiv.style.display = 'flex';
+  entryDiv.style.justifyContent = 'space-between';
+  entryDiv.style.alignItems = 'center';
+  entryDiv.style.marginBottom = '8px';
+
+  // Create text span (left-aligned)
+  const textSpan = document.createElement('span');
+  textSpan.textContent = text;
+  textSpan.style.flex = '1';
+
+  // Create buttons container (right-aligned)
+  const buttonsDiv = document.createElement('div');
+  buttonsDiv.style.display = 'flex';
+  buttonsDiv.style.gap = '8px';
+
+  // Reject button
+  const rejectBtn = document.createElement('button');
+  rejectBtn.innerHTML = '❌';
+  rejectBtn.title = 'Reject';
+  rejectBtn.onclick = () => logToServer(`${counter}:reject`);
+
+  // Accept button
+  const acceptBtn = document.createElement('button');
+  acceptBtn.innerHTML = '✅';
+  acceptBtn.title = 'Accept';
+  acceptBtn.onclick = () => logToServer(`${counter}:accept`);
+
+  // Rewrite button
+  const rewriteBtn = document.createElement('button');
+  rewriteBtn.innerHTML = '✏️';
+  rewriteBtn.title = 'Rewrite';
+  rewriteBtn.onclick = () => {
+    const newText = prompt('Edit transcription:', textSpan.textContent);
+    if (newText !== null && newText.trim() !== '') {
+      textSpan.textContent = newText.trim();
+      logToServer(`${counter}:rewrite:${newText.trim()}`);
+    }
+  };
+
+  buttonsDiv.appendChild(rejectBtn);
+  buttonsDiv.appendChild(acceptBtn);
+  buttonsDiv.appendChild(rewriteBtn);
+
+  entryDiv.appendChild(textSpan);
+  entryDiv.appendChild(buttonsDiv);
+
+  // Add visual celebration
+  entryDiv.classList.add('celebrate');
+  setTimeout(() => entryDiv.classList.remove('celebrate'), 2000);
+
+  // Insert at the top
+  transcriptionsDiv.insertBefore(entryDiv, transcriptionsDiv.firstChild);
+}
+
+function startRecordingCycle() {
+  const segmentSamples = segmentLength * sampleRate;
+  buffer = [];
+  
+  const startTime = audioContext.currentTime;
+  const endTime = startTime + segmentLength;
+
+  function updateTimer() {
+    const remaining = Math.max(0, endTime - audioContext.currentTime);
+    const percentage = ((segmentLength - remaining) / segmentLength) * 100;
+    document.getElementById('timer').textContent = Math.ceil(remaining);
+    document.getElementById('timer').style.setProperty('--progress', `${percentage}%`);
+
+    if (remaining > 0) {
+      requestAnimationFrame(updateTimer);
+    } else {
+      const segment = buffer.slice(0, segmentSamples);
+      sendAudioSegment(segment);
+      startRecordingCycle();
+    }
+  }
+  updateTimer();
+}
+
+episodePlayer.addEventListener('play', (event) => {
+  if (event.isTrusted) {
+    logToServer('Playing the episode');
+  }
+});
+
+document.getElementById('vocabBtn').addEventListener('click', showVocabOverlay);
+
+function showVocabOverlay() {
+  // Create overlay if not already present
+  let overlay = document.getElementById('overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'overlay';
+    overlay.innerHTML = `
+      <div class="vocab-modal">
+        <button class="close-button">✖</button>
+        <h2>Manage Vocabulary</h2>
+        
+        <div>
+          <label for="vocabSelect">Select existing vocabulary:</label><br>
+          <select id="vocabSelect" style="width: 100%; padding: 8px; margin-top: 6px;"></select>
+        </div>
+
+        <div style="margin-top: 20px;">
+          <label for="newVocab">Create new vocabulary:</label><br>
+          <textarea id="newVocab" placeholder="New vocabulary name" style="width: 100%; padding: 8px; margin-top: 6px; height:20vh;"></textarea>
+          <button id="submitVocab" style="margin-top: 10px;">Submit</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    // Style and behavior
+    document.querySelector('.close-button').onclick = () => overlay.style.display = 'none';
+    document.getElementById('submitVocab').onclick = () => {
+      const name = document.getElementById('newVocab').value.trim();
+      if (name) {
+        logToServer(`create_vocabulary:${name}`);
+        overlay.style.display = 'none';
+      }
+    };
+    document.getElementById('vocabSelect').onchange = (e) => {
+      const selectedId = e.target.value;
+      if (selectedId) {
+        socket.send(JSON.stringify({ action: 'select_vocabulary', argument: selectedId }));
+        overlay.style.display = 'none';
+      }
+    };
+  }
+
+  overlay.style.display = 'flex';
+
+  // Fetch vocabularies.json
+  // Use the already-parsed vocabList
+  const select = document.getElementById('vocabSelect');
+  select.innerHTML = ''; // clear previous
+  for (const [name, id] of vocabList) {
+    const option = document.createElement('option');
+    option.value = id;
+    option.textContent = name;
+    select.appendChild(option);
+  }
+}
+
+startListening();
+</script>
+
+</body>
+</html>

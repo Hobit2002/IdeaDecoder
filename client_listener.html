@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Audio Share & Listen</title>
+  <style>
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      height: 100vh;
+      background: linear-gradient(135deg, #dfe9f3, #ffffff);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      padding: 20px;
+    }
+
+    #transcriptions {
+      width: 80%;
+      height: 20vh;
+      max-height: 40vh;
+      overflow-y: auto;
+      background: #ffffffd9;
+      border: 1px solid #ccc;
+      border-radius: 10px;
+      padding: 15px;
+      font-size: 1.2em;
+      color: #333;
+      box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.05);
+    }
+
+    /* Individual transcription entries */
+    .transcription-entry {
+      margin: 0.5em 0;
+      opacity: 0;
+      animation: fadeIn 0.6s forwards;
+    }
+
+    /* Entry animation */
+    @keyframes fadeIn {
+      to {
+        opacity: 1;
+      }
+    }
+
+    /* Celebration animation */
+    .transcription-entry.celebrate {
+      animation: glow 1s ease-out, fadeIn 0.6s forwards;
+      color: #2e7d32;
+      background-color: yellow;
+    }
+
+    @keyframes glow {
+      0% {
+        text-shadow: 0 0 5px #8bc34a, 0 0 10px #8bc34a;
+      }
+      100% {
+        text-shadow: none;
+      }
+    }
+
+    #transcriptions { margin-top: 30px; font-size: 1.5em; color: #333; }
+
+    #qrCode { margin-top: 20px; }
+
+    audio { width: 30vw; height: 10vh;}
+
+    .transcription-entry button {
+        background: none;
+        border: none;
+        font-size: 1.2em;
+        cursor: pointer;
+    }
+
+    .transcription-entry button:hover {
+        transform: scale(1.1);
+    }
+
+    .celebrate {
+        animation: flash 0.3s ease-in-out 3;
+    }
+
+    @keyframes flash {
+        0%   { background-color: #dff0d8; }
+        50%  { background-color: #f0fff0; }
+        100% { background-color: transparent; }
+    }
+
+  </style>
+
+</head>
+<body>
+
+<h1>Transcriptions:</h1>
+
+<div id="transcriptions"></div>
+
+<script>
+
+let audioCounter = 0;
+
+let workletNode;
+let socket;
+let audioContext;
+let mediaStream;
+let processor;
+let buffer = [];
+let leftover = [];
+let serverAdress = "jasmiapp.onrender.com"
+
+window.onload = () => {
+  connectWebSocket(); 
+};
+
+function connectWebSocket() {
+  console.log("Connecting to WebSocket at ",`ws://${serverAdress}`)
+  socket = new WebSocket(`wss://${serverAdress}`);
+  
+  socket.onopen = () => {
+    console.log('WebSocket connected');
+    // Register as listener
+    socket.send(JSON.stringify({ action: "register_client", role: "listener" }));
+    }
+  
+    socket.onmessage = (event) => {
+        const message = JSON.parse(event.data);
+        if (message.type === 'transcription') {
+            displayTranscription(message.counter, message.text);
+        }
+    };
+  
+  socket.onerror = (error) => console.error('WebSocket error', error);
+  socket.onclose = () => console.log('WebSocket closed');
+}
+
+function handleShare() {
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify({ action: 'request_address' }));
+  }
+}
+
+function logToServer(message) {
+  console.log(message);
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify({ action: 'log', "msg": message }));
+  }
+}
+
+async function restartWorklet() {
+  if (!audioContext || !mediaStream) return;
+
+  const source = audioContext.createMediaStreamSource(mediaStream);
+  workletNode = new AudioWorkletNode(audioContext, 'recorder-processor');
+
+  workletNode.port.onmessage = (event) => {
+    buffer.push(...event.data);
+  };
+
+  source.connect(workletNode).connect(audioContext.destination);
+}
+
+function displayTranscription(counter, text) {
+  const transcriptionsDiv = document.getElementById('transcriptions');
+
+  // Create the main container
+  const entryDiv = document.createElement('div');
+  entryDiv.className = 'transcription-entry';
+  entryDiv.style.display = 'flex';
+  entryDiv.style.justifyContent = 'space-between';
+  entryDiv.style.alignItems = 'center';
+  entryDiv.style.marginBottom = '8px';
+
+  // Create text span (left-aligned)
+  const textSpan = document.createElement('span');
+  textSpan.textContent = text;
+  textSpan.style.flex = '1';
+
+  // Create buttons container (right-aligned)
+  const buttonsDiv = document.createElement('div');
+  buttonsDiv.style.display = 'flex';
+  buttonsDiv.style.gap = '8px';
+
+  // Reject button
+  const rejectBtn = document.createElement('button');
+  rejectBtn.innerHTML = '❌';
+  rejectBtn.title = 'Reject';
+  rejectBtn.onclick = () => logToServer(`${counter}:reject`);
+
+  // Accept button
+  const acceptBtn = document.createElement('button');
+  acceptBtn.innerHTML = '✅';
+  acceptBtn.title = 'Accept';
+  acceptBtn.onclick = () => logToServer(`${counter}:accept`);
+
+  // Rewrite button
+  const rewriteBtn = document.createElement('button');
+  rewriteBtn.innerHTML = '✏️';
+  rewriteBtn.title = 'Rewrite';
+  rewriteBtn.onclick = () => {
+    const newText = prompt('Edit transcription:', textSpan.textContent);
+    if (newText !== null && newText.trim() !== '') {
+      textSpan.textContent = newText.trim();
+      logToServer(`${counter}:rewrite:${newText.trim()}`);
+    }
+  };
+
+  buttonsDiv.appendChild(rejectBtn);
+  buttonsDiv.appendChild(acceptBtn);
+  buttonsDiv.appendChild(rewriteBtn);
+
+  entryDiv.appendChild(textSpan);
+  entryDiv.appendChild(buttonsDiv);
+
+  // Add visual celebration
+  entryDiv.classList.add('celebrate');
+  setTimeout(() => entryDiv.classList.remove('celebrate'), 2000);
+
+  // Insert at the top
+  transcriptionsDiv.insertBefore(entryDiv, transcriptionsDiv.firstChild);
+}
+
+startListening();
+</script>
+
+</body>
+</html>
